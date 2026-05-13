@@ -1,0 +1,35 @@
+# --- Environments & Dependencies ---
+.env
+.venv
+env/
+venv/
+ENV/
+node_modules/
+__pycache__/
+*.pyc
+
+# --- Operating System Files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- IDE & Editor Settings ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Logs & Temp Files ---
+*.log
+logs/
+tmp/
+temp/
+*.bak
+*.swp
+
+# --- Build & Distribution ---
+dist/
+build/
+out/
+bin/
+obj/
