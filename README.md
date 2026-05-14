@@ -1,109 +1,167 @@
 # COS730 Assignment 2 — Intelligent Submission & Review System
 
-A Python-based Intelligent Submission and Review System. The project implements and empirically compares a **baseline** architecture against an **optimised** architecture, benchmarking key performance characteristics across both implementations.
+A Python-based Intelligent Submission and Review System implementing and empirically
+comparing a **baseline** architecture against an **optimised** architecture. The project
+demonstrates measurable improvements in execution time, method call count, code complexity,
+and maintainability through targeted structural refactoring.
 
----
+-----
 
 ## Project Structure
 
 ```
-COS720_ASSIGNMENT_2/
+COS730_ASSIGNMENT_2/
 │
-├── baseline/                        # Baseline implementation
-│   ├── controllers/
-│   │   └── submission_controller.py # Handles submission flow logic
-│   ├── models/
-│   │   └── submission.py            # Submission data model
-│   ├── services/
-│   │   ├── database.py              # Database access layer
-│   │   ├── evaluation_manager.py    # Manages submission evaluation
-│   │   ├── notification_service.py  # Sends notifications to users
-│   │   ├── reviewer_manager.py      # Assigns and manages reviewers
-│   │   └── validator.py             # Validates submission data
-│   ├── ui/
-│   │   └── ui.py                    # CLI/UI interface
-│   └── main.py                      # Baseline entry point
+├── baseline/ # Baseline implementation (faithfully mirrors sequence diagram)
+│ ├── controllers/
+│ │ └── submission_controller.py # Central orchestrator — drives full submission flow
+│ ├── models/
+│ │ └── submission.py # Submission and Reviewer dataclasses
+│ ├── services/
+│ │ ├── database.py # Monolithic database — serves submissions, reviewers, scores
+│ │ ├── evaluation_manager.py # Three public self-calls: calculateAverage, checkConsensus, applyRules
+│ │ ├── notification_service.py # Three separate outcome methods: notifyAcceptance/Rejection/Revision
+│ │ ├── reviewer_manager.py # Two-pass filtering: filterConflicts then checkWorkload
+│ │ └── validator.py # Format validation — returns boolean signal
+│ ├── ui/
+│ │ └── ui.py # UI relay lifeline — forwards calls to SubmissionController
+│ └── main.py # Baseline entry point
 │
-├── optimised/                       # Optimised implementation
-│   ├── controllers/
-│   │   └── submission_controller.py # Optimised submission controller
-│   ├── models/
-│   │   └── submission.py            # Optimised submission model
-│   ├── services/
-│   │   ├── evaluation_service.py    # Refactored evaluation service
-│   │   ├── notification_service.py  # Optimised notification service
-│   │   ├── reviewer_service.py      # Optimised reviewer service
-│   │   └── validation_service.py   # Optimised validation service
-│   └── main.py                      # Optimised entry point
+├── optimised/ # Optimised implementation (based on redesigned sequence diagram)
+│ ├── controllers/
+│ │ └── submission_controller.py # Slim seven-step coordinator — no internal logic
+│ ├── models/
+│ │ └── submission.py # Submission and Reviewer dataclasses
+│ ├── services/
+│ │ ├── repositories.py # SubmissionRepository + ReviewerRepository (replaces monolithic DB)
+│ │ ├── evaluation_manager.py # Single start_evaluation() entry point; internal steps are private
+│ │ ├── notification_service.py # Unified send_notification(decision) dispatcher
+│ │ ├── reviewer_manager.py # Single-pass get_available_reviewers() — conflict + workload internalised
+│ │ └── validator.py # Format validation — returns boolean signal
+│ └── main.py # Optimised entry point
 │
-├── benchmarks/                      # Performance benchmarking module
-│   ├── results/                     # Stored benchmark output files
-│   ├── benchmark_runner.py          # Runs benchmarks on both implementations
-│   ├── count_methods.py             # Utility: counts methods across modules
-│   └── __init__.py
+├── benchmarks/ # Performance benchmarking module
+│ ├── results/ # Stored benchmark output files
+│ ├── benchmark_runner.py # Runs and compares both implementations across 1000 runs
+│ ├── count_methods.py # Counts method calls across both implementations
+│ └── __init__.py
 │
-├── tests/                           # Test suite
-│   ├── test_baseline.py             # Unit/integration tests for baseline
-│   ├── test_optimised.py            # Unit/integration tests for optimised
-│   └── __init__.py
+├── tests/ # Test suite
+│ ├── test_baseline.py # 8 test cases for baseline implementation
+│ ├── test_optimised.py # 9 test cases including functional equivalence test
+│ └── __init__.py
 │
-├── requirements.txt                 # Python dependencies
+├── requirements.txt # Python dependencies
 └── README.md
 ```
 
----
+-----
 
 ## System Overview
 
-The system models a university-style **submission and peer review pipeline**, where students submit work, reviewers are assigned, submissions are validated and evaluated, and notifications are dispatched throughout the process.
+The system models a university-style submission and peer review pipeline where a researcher
+submits work, reviewers are assigned and evaluated, scores are collected, and a final
+outcome is determined and communicated. Two implementations are provided:
 
-Two implementations are provided:
+|Feature |Baseline |Optimised |
+|------------------|------------------------------------------------------------|------------------------------------------------|
+|Entry point |`UI` relay → `SubmissionController` |Direct `SubmissionController` |
+|Persistence layer |Monolithic `Database` class |`SubmissionRepository` + `ReviewerRepository` |
+|Reviewer filtering|Two separate passes: `filterConflicts()` + `checkWorkload()`|Single-pass `get_available_reviewers()` |
+|Evaluation |Three public self-calls exposed at controller level |Single `start_evaluation()` — internals private |
+|Notification |Three outcome-specific methods |Unified `send_notification(decision)` dispatcher|
+|Controller fan-out|6 lifelines |5 components, one call each |
 
-| Feature | Baseline | Optimised |
-|---|---|---|
-| Architecture style | Monolithic services | Separated service layer |
-| Reviewer handling | `reviewer_manager.py` | `reviewer_service.py` |
-| Evaluation handling | `evaluation_manager.py` | `evaluation_service.py` |
-| Validation | `validator.py` | `validation_service.py` |
-| DB layer | `database.py` (inline) | Abstracted in service layer |
+-----
 
----
+## Architecture Differences
+
+### Baseline Architecture
+
+The baseline faithfully implements the provided sequence diagram, preserving all
+interactions, lifelines, and responsibility allocations — including intentional design smells:
+
+- **UI Middleman:** The `UI` class acts as a passive relay between the Researcher and
+`SubmissionController`, adding call-stack depth without contributing any logic.
+- **Monolithic Database:** A single `Database` class is accessed by `SubmissionController`,
+`ReviewerManager`, and `EvaluationManager` for unrelated purposes, creating hidden coupling.
+- **Split reviewer filtering:** `filterConflicts()` and `checkWorkload()` are separate calls
+that each iterate the full reviewer list independently.
+- **Exposed evaluation internals:** `calculateAverage()`, `checkConsensus()`, and
+`applyRules()` are three public self-calls visible at the controller level.
+- **Fragmented notifications:** Three separate methods `notifyAcceptance()`,
+`notifyRejection()`, and `notifyRevision()` require the caller to know the decision type.
+
+### Optimised Architecture
+
+The optimised implementation addresses each identified smell through targeted refactoring:
+
+- **UI eliminated:** The Researcher interacts directly with `SubmissionController`,
+removing the Middleman relay and reducing call-stack depth on every execution path.
+- **Database decomposed:** `SubmissionRepository` owns submission persistence;
+`ReviewerRepository` owns reviewer retrieval. Each component depends only on its
+relevant repository.
+- **Filtering consolidated:** `ReviewerManager.get_available_reviewers()` performs conflict
+and workload checks in a single method, internalising both concerns.
+- **Evaluation encapsulated:** `_calculate_average()`, `_check_consensus()`, and
+`_apply_rules()` are private methods. The controller calls `start_evaluation()` and
+receives a decision string — with no knowledge of the internal computation steps.
+- **Notification unified:** `send_notification(decision)` owns the routing logic internally.
+Adding a new outcome type requires only a new branch — no interface change, no controller
+modification.
+
+-----
+
+## Decision Logic
+
+The evaluation pipeline implements a three-rule decision table:
+
+|Condition |Rule 1 |Rule 2 |Rule 3 |Rule 4 |
+|-------------------------------|------------|------------|------------|------------|
+|Average score ≥ 7.0 |Y |Y |N |N |
+|Average score < 4.0 |N |N |Y |N |
+|Consensus reached (range ≤ 2.0)|Y |N |— |— |
+|**Decision** |**Accepted**|**Revision**|**Rejected**|**Revision**|
+
+This is implemented in `EvaluationManager._apply_rules()`:
+
+```python
+def _apply_rules(self, avg, consensus):
+if avg >= 7.0 and consensus: return "accepted" # Rule 1
+if avg < 4.0: return "rejected" # Rule 3
+return "revision" # Rules 2 and 4
+```
+
+-----
 
 ## Getting Started
 
 ### Prerequisites
 
 - Python 3.10+
-- `pip` or `poetry`
+- pip
 
 ### Installation
 
 ```bash
-# Extract the submitted zip file
-unzip COS720_ASSIGNMENT_2.zip
-cd COS720_ASSIGNMENT_2
-
-# Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate        # On Windows: .venv\Scripts\activate
-
-# Install dependencies
+git clone https://github.com/Kamohelo99/COS730_ASSIGNMENT_2.git
+cd COS730_ASSIGNMENT_2
 pip install -r requirements.txt
 ```
 
 ### Running the Baseline
 
 ```bash
-python -m baseline/main.py
+python -m baseline.main
 ```
 
 ### Running the Optimised Version
 
 ```bash
-python -m optimised/main.py
+python -m optimised.main
 ```
 
----
+-----
 
 ## Running Tests
 
@@ -112,68 +170,50 @@ python -m optimised/main.py
 pytest tests/
 
 # Run baseline tests only
-pytest tests/test_baseline.py
+pytest tests/test_baseline.py -v
 
 # Run optimised tests only
-pytest tests/test_optimised.py
-
-# With verbose output
-pytest tests/ -v
+pytest tests/test_optimised.py -v
 ```
 
----
+Both test suites are executed under a fixed random seed of 42 for deterministic results.
+The optimised suite includes all 8 baseline test cases.
+
+-----
 
 ## Running Benchmarks
 
 ```bash
-# Run the full benchmark suite (compares both implementations)
-python benchmarks/benchmark_runner.py
+# Run full benchmark suite — compares both implementations over 1000 runs
+python -m benchmarks.benchmark_runner
 
-# Count methods across the codebase (compares both implementations)
-python benchmarks/count_methods.py
 ```
 
-Benchmark results are saved to `benchmarks/results/`.
+-----
 
----
+## Empirical Results
 
-## Design & Architecture
+Both implementations were benchmarked under identical conditions with seed 42 across
+1,000 repeated runs:
 
-### Baseline Architecture
+|Metric |Baseline|Optimised|Change |
+|--------------------------|--------|---------|-------|
+|Mean Execution Time |1.061ms |0.920ms |−13.3% |
+|Method Calls |153 |113 |−26.1% |
+|SLOC |55 |39 |−29.1% |
+|Cyclomatic Complexity (CC)|4 |4 |0% |
+|Maintainability Index (MI)|87.28% |88.32% |+1.04pp|
+|Halstead Volume |272.48 |168.56 |−38.1% |
+|Halstead Difficulty |1.47 |0 |−100% |
+|Efferent Coupling (CBO) |5 |5 |0% |
 
-The baseline uses a **procedural service design** where each service (evaluation, notification, reviewer, validation) operates as a standalone module with direct dependencies. This was intentionally kept simple to serve as a performance and complexity baseline.
+CC and CBO remaining constant confirms the optimisation targeted structural redundancy
+without altering business logic or introducing new dependencies.
 
-### Optimised Architecture
-
-The optimised version applies the following improvements:
-
-- **Single Responsibility Principle**: Each service has a clearly scoped role (`evaluation_service`, `reviewer_service`, `validation_service`)
-- **Reduced coupling**: Services communicate through defined interfaces rather than direct imports
-- **Improved testability**: Separation of concerns makes each service independently testable
-
-### Decision Table
-
-The system uses a decision table within the evaluation pipeline to determine submission outcomes based on multiple input conditions (e.g. completeness, deadline compliance, reviewer availability).
-
----
-
-## Empirical Evaluation
-
-Both implementations were benchmarked across the following metrics:
-
-- **Method Call Count** 
-- **Execution Time**
-- **Source Lines of Code (SLOC)** 
-- **MI and Public Methods**
-- **Cyclomatic complexity** of core modules
-- **Ease of Change Analysis**
-
-Results are stored in `benchmarks/results/` and analysed in the accompanying assignment report.
-
----
+-----
 
 ## Author
 
-**Kamohelo**
-COS720 — Honours Software Engineering  
+**Kamohelo** — u25721616
+COS730 Honours Software Engineering
 University of Pretoria
