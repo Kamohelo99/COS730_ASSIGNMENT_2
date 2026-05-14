@@ -41,14 +41,12 @@ COS730_ASSIGNMENT_2/
 │ └── main.py # Optimised entry point
 │
 ├── benchmarks/ # Performance benchmarking module
-│ ├── results/ # Stored benchmark output files
 │ ├── benchmark_runner.py # Runs and compares both implementations across 1000 runs
-│ ├── count_methods.py # Counts method calls across both implementations
 │ └── __init__.py
 │
 ├── tests/ # Test suite
-│ ├── test_baseline.py # 8 test cases for baseline implementation
-│ ├── test_optimised.py # 9 test cases including functional equivalence test
+│ ├── test_baseline.py #  test cases for baseline implementation
+│ ├── test_optimised.py #  test cases including functional equivalence test
 │ └── __init__.py
 │
 ├── requirements.txt # Python dependencies
